@@ -47,19 +47,6 @@ export default defineConfig({
       workbox: {
         navigateFallback: `${base}index.html`,
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
-        runtimeCaching: [
-          {
-            // Overpass (OpenStreetMap) results: use the network, fall back to the last answer offline.
-            urlPattern: /^https:\/\/overpass(-api)?\.[a-z.]+\/api\/interpreter/,
-            handler: 'NetworkFirst',
-            method: 'GET',
-            options: {
-              cacheName: 'overpass',
-              networkTimeoutSeconds: 20,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
-          },
-        ],
       },
     }),
   ],

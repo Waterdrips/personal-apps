@@ -32,7 +32,7 @@ async function search() {
 
     setStatus('Looking for parks, woods and commons…');
     const radiusKm = driveMinutesToKm(maxMin) * 1.15; // a little slack; real times trim it later
-    const spots = await findSpots(here, radiusKm, await getSetting(db, 'overpassUrl'));
+    const { spots, raw } = await findSpots(here, radiusKm, await getSetting(db, 'overpassUrl'), setStatus);
 
     let candidates = spots.map((s) => {
       const km = distanceKm(here, s);
@@ -64,7 +64,7 @@ async function search() {
     setStatus(
       lastResults.length
         ? `${lastResults.length} walks within ${maxMin} min${orsKey ? '' : ' (drive times estimated — add a key in Settings for real ones)'}`
-        : 'Nothing found — try a longer drive time.'
+        : `Nothing suitable found (map returned ${raw} places, ${spots.length} usable) — try a longer drive time.`
     );
     await renderResults();
   } catch (e) {
