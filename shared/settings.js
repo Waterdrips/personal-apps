@@ -16,7 +16,8 @@ export async function setSetting(db, key, value) {
  * Renders a settings screen.
  * @param {HTMLElement} el
  * @param {import('dexie').Dexie} db
- * @param {{ key:string, label:string, help?:string, secret?:boolean, type?:string }[]} fields
+ * @param {{ key:string, label:string, help?:string, secret?:boolean, type?:string,
+ *           options?:Record<string,string>, default?:string }[]} fields
  * @param {string} appId  used for the backup file name
  */
 export async function renderSettings(el, db, fields, appId) {
@@ -36,8 +37,14 @@ export async function renderSettings(el, db, fields, appId) {
           <label class="field">
             <span>${f.label}</span>
             <span class="row">
-              <input name="${f.key}" type="${f.secret ? 'password' : f.type ?? 'text'}"
-                     value="${escapeAttr(values[f.key])}" autocomplete="off" spellcheck="false" />
+              ${
+                f.options
+                  ? `<select name="${f.key}" style="flex:1">${Object.entries(f.options)
+                      .map(([v, label]) => `<option value="${escapeAttr(v)}" ${(values[f.key] || f.default) === v ? 'selected' : ''}>${label}</option>`)
+                      .join('')}</select>`
+                  : `<input name="${f.key}" type="${f.secret ? 'password' : f.type ?? 'text'}"
+                     value="${escapeAttr(values[f.key])}" autocomplete="off" spellcheck="false" />`
+              }
               ${f.secret ? `<button type="button" class="ghost" data-reveal="${f.key}">Show</button>` : ''}
             </span>
             ${f.help ? `<small class="muted">${f.help}</small>` : ''}

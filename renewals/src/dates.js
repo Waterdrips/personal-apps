@@ -28,6 +28,35 @@ function toStr(d) {
   return d.toISOString().slice(0, 10);
 }
 
+// ---------- Working days ----------
+let HOLIDAYS = new Set();
+export function setHolidays(set) {
+  HOLIDAYS = set;
+}
+
+export const WORKDAY_RULES = {
+  '': 'Pay on that day',
+  next: 'Next working day',
+  prev: 'Previous working day',
+};
+
+export function isWorkingDay(date) {
+  const d = parse(date).getUTCDay();
+  return d !== 0 && d !== 6 && !HOLIDAYS.has(date);
+}
+
+/** The date money actually moves, after weekend / bank-holiday rules. */
+export function adjust(date, rule) {
+  if (!rule) return date;
+  const dir = rule === 'prev' ? -1 : 1;
+  let d = date;
+  for (let i = 0; !isWorkingDay(d) && i < 10; i++) d = toStr(new Date(parse(d).getTime() + dir * 86400000));
+  return d;
+}
+
+/** Actual date for an item. */
+export const payDate = (item) => adjust(item.due, item.workday);
+
 export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** `months` (1–12) only applies to monthly items, e.g. council tax paid Apr–Jan. */
@@ -68,11 +97,11 @@ function step(date, repeat, originalDay) {
 }
 
 /** Rolls a repeating date forward until it's today or later. */
-export function rollForward(date, repeat, originalDay, months) {
+export function rollForward(date, repeat, originalDay, months, workday) {
   if (!repeat) return date;
   const t = today();
   let d = alignToMonths(date, repeat, originalDay, months);
-  for (let i = 0; d < t && i < 1000; i++) d = addRepeat(d, repeat, originalDay, months);
+  for (let i = 0; adjust(d, workday) < t && i < 1000; i++) d = addRepeat(d, repeat, originalDay, months);
   return d;
 }
 
@@ -81,7 +110,7 @@ export function dueWithin(item, days) {
   const limit = toStr(new Date(parse(today()).getTime() + days * 86400000));
   let total = 0;
   let d = item.due;
-  for (let i = 0; d <= limit && i < 400; i++) {
+  for (let i = 0; adjust(d, item.workday) <= limit && i < 400; i++) {
     total += Number(item.price) || 0;
     if (!item.repeat) break;
     d = addRepeat(d, item.repeat, item.day, item.months);
@@ -118,7 +147,7 @@ export function whenText(date) {
 }
 
 export function niceDate(date) {
-  return parse(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return parse(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 /** Cost of a subscription normalised to per-month (average) and per-year. */
@@ -134,8 +163,11 @@ export function money(n, symbol = '£') {
 
 /** Google Calendar "add event" link, with the repeat rule, for phone reminders. */
 export function calendarLink(item) {
-  const d = item.due.replace(/-/g, '');
-  const end = toStr(new Date(parse(item.due).getTime() + 86400000)).replace(/-/g, '');
+  // Calendar repeat rules can't express "next working day", so the event starts on the actual
+  // next payment date and then repeats on the scheduled day.
+  const start = payDate(item);
+  const d = start.replace(/-/g, '');
+  const end = toStr(new Date(parse(start).getTime() + 86400000)).replace(/-/g, '');
   const r = REPEATS[item.repeat];
   const only = activeMonths(item.repeat, item.months);
   const rule = !r?.perYear

@@ -4,8 +4,9 @@ import { openDb } from '../../shared/db.js';
 import { renderSettings, getSetting } from '../../shared/settings.js';
 import {
   REPEATS, PERIOD_WORD, MONTH_NAMES, today, addRepeat, rollForward, daysUntil, whenText, niceDate, costs, money,
-  calendarLink, dueWithin, monthsLabel,
+  calendarLink, dueWithin, monthsLabel, WORKDAY_RULES, setHolidays, payDate, adjust,
 } from './dates.js';
+import { REGIONS, holidaySet, fetchGovUk } from './holidays.js';
 
 document.documentElement.style.setProperty('--accent', '#3b5b92');
 
@@ -13,7 +14,16 @@ document.documentElement.style.setProperty('--accent', '#3b5b92');
 // due: next date (YYYY-MM-DD), repeat: key of REPEATS, day: day-of-month anchor for monthly repeats
 const db = openDb('renewals', { 1: { items: '++id, kind, due, category' } });
 
-const SETTINGS = [{ key: 'currency', label: 'Currency symbol', help: 'Defaults to £.' }];
+const SETTINGS = [
+  { key: 'currency', label: 'Currency symbol', help: 'Defaults to £.' },
+  {
+    key: 'region',
+    label: 'Bank holidays',
+    options: REGIONS,
+    default: 'england-and-wales',
+    help: 'Used for “next working day” payments like mortgages and Direct Debits.',
+  },
+];
 
 const $ = (s) => document.querySelector(s);
 const editor = $('#editor');
@@ -28,6 +38,8 @@ F.billing.innerHTML = Object.entries(REPEATS)
   .filter(([k]) => k)
   .map(([k, r]) => `<option value="${k}" ${k === '1m' ? 'selected' : ''}>${r.label}</option>`)
   .join('');
+
+F.workday.innerHTML = Object.entries(WORKDAY_RULES).map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
 
 $('#month-grid').innerHTML = MONTH_NAMES.map(
   (m, i) => `<label class="month"><input type="checkbox" name="months" value="${i + 1}" checked /><span>${m}</span></label>`
@@ -45,15 +57,40 @@ init();
 
 async function init() {
   symbol = (await getSetting(db, 'currency')) || '£';
+  await loadHolidays();
   await renewPastSubscriptions();
   refresh();
+  // Top up with the official gov.uk list in the background (handles one-off holidays).
+  const region = await currentRegion();
+  const official = await fetchGovUk(region);
+  if (official) {
+    await db.settings.put({ key: `govuk:${region}`, value: official });
+    await loadHolidays();
+    refresh();
+  }
+}
+
+async function currentRegion() {
+  return (await getSetting(db, 'region')) || 'england-and-wales';
+}
+
+async function loadHolidays() {
+  const region = await currentRegion();
+  const cached = (await db.settings.get(`govuk:${region}`))?.value ?? null;
+  setHolidays(holidaySet(region, cached));
+}
+
+/** "Mon 2 Nov 2026" plus a note when the date was moved for a weekend/bank holiday. */
+function dateText(i) {
+  const pay = payDate(i);
+  return pay === i.due ? niceDate(pay) : `${niceDate(pay)} (moved from ${niceDate(i.due).replace(/ \d{4}$/, '')})`;
 }
 
 /** Subscriptions renew on their own, so move any past renewal dates on to the next one. */
 async function renewPastSubscriptions() {
   const t = today();
-  const past = await db.items.where('kind').equals('sub').filter((i) => i.due < t).toArray();
-  for (const i of past) await db.items.update(i.id, { due: rollForward(i.due, i.repeat, i.day, i.months) });
+  const past = await db.items.where('kind').equals('sub').filter((i) => payDate(i) < t).toArray();
+  for (const i of past) await db.items.update(i.id, { due: rollForward(i.due, i.repeat, i.day, i.months, i.workday) });
 }
 
 function refresh() {
@@ -64,16 +101,18 @@ function refresh() {
 // ---------- Coming up ----------
 
 async function renderUpcoming() {
-  const items = await db.items.orderBy('due').toArray();
+  const items = (await db.items.toArray())
+    .map((i) => ({ ...i, pay: payDate(i) }))
+    .sort((a, b) => (a.pay < b.pay ? -1 : 1));
   const el = $('#upcoming');
   if (!items.length) {
     el.innerHTML = `<p class="muted">Nothing here yet. Tap <strong>+</strong> to add an MOT, insurance renewal, or a subscription.</p>`;
     return;
   }
   const groups = [
-    ['Overdue', items.filter((i) => daysUntil(i.due) < 0)],
-    ['Next 30 days', items.filter((i) => daysUntil(i.due) >= 0 && daysUntil(i.due) <= 30)],
-    ['Later', items.filter((i) => daysUntil(i.due) > 30)],
+    ['Overdue', items.filter((i) => daysUntil(i.pay) < 0)],
+    ['Next 30 days', items.filter((i) => daysUntil(i.pay) >= 0 && daysUntil(i.pay) <= 30)],
+    ['Later', items.filter((i) => daysUntil(i.pay) > 30)],
   ].filter(([, list]) => list.length);
 
   el.innerHTML = groups
@@ -83,7 +122,7 @@ async function renderUpcoming() {
 }
 
 function rowHtml(i) {
-  const n = daysUntil(i.due);
+  const n = daysUntil(i.pay);
   const tone = n < 0 ? 'overdue' : n <= 7 ? 'soon' : '';
   const price = i.kind === 'sub' ? ` · ${money(i.price, symbol)}` : '';
   const done = i.kind === 'due' ? `<button class="ghost small-btn" data-done="${i.id}">${i.repeat ? 'Done ↻' : 'Done'}</button>` : '';
@@ -91,7 +130,7 @@ function rowHtml(i) {
     <article class="card item ${tone}" data-edit="${i.id}">
       <span class="grow">
         <strong>${esc(i.name)}</strong>
-        <small>${whenText(i.due)} · ${niceDate(i.due)}${price}${i.category ? ` · ${esc(i.category)}` : ''}</small>
+        <small>${whenText(i.pay)} · ${dateText(i)}${price}${i.category ? ` · ${esc(i.category)}` : ''}</small>
       </span>
       ${done}
     </article>`;
@@ -110,7 +149,7 @@ function bindRows(el) {
       if (item.repeat) {
         // Roll on from the due date (not today), so the MOT stays on its usual date.
         let next = addRepeat(item.due, item.repeat, item.day, item.months);
-        if (next < today()) next = rollForward(next, item.repeat, item.day, item.months);
+        if (adjust(next, item.workday) < today()) next = rollForward(next, item.repeat, item.day, item.months, item.workday);
         await db.items.update(item.id, { due: next });
       } else if (confirm(`Mark “${item.name}” done and remove it?`)) {
         await db.items.delete(item.id);
@@ -154,7 +193,7 @@ async function renderSubs() {
       <article class="card item" data-edit="${s.id}">
         <span class="grow">
           <strong>${esc(s.name)}</strong>
-          <small>${money(s.price, symbol)} per ${PERIOD_WORD[s.repeat]}${monthsLabel(s.months) ? ` (${monthsLabel(s.months)})` : ''} · next ${niceDate(s.due)}</small>
+          <small>${money(s.price, symbol)} per ${PERIOD_WORD[s.repeat]}${monthsLabel(s.months) ? ` (${monthsLabel(s.months)})` : ''} · next ${dateText(s)}</small>
         </span>
         <span class="right">
           <strong>${money(s.perMonth, symbol)}</strong><small>/month</small>
@@ -184,6 +223,7 @@ async function openEditor(id) {
   F.category.value = item?.category ?? '';
   F.notes.value = item?.notes ?? '';
   F.price.value = item?.price ?? '';
+  F.workday.value = item?.workday ?? (kind === 'sub' ? 'next' : '');
   if (kind === 'sub') F.billing.value = item?.repeat || '1m';
   else F.repeat.value = item?.repeat ?? '1y';
   const months = item?.months?.length ? item.months : null;
@@ -210,6 +250,10 @@ function syncForm() {
   $('#months-box').hidden = !(isSub && F.billing.value === '1m');
   F.price.required = isSub;
   $('#date-label').textContent = isSub ? 'Next payment' : 'Due on';
+  const pv = $('#pay-preview');
+  const due = F.due.value;
+  const pay = due ? adjust(due, F.workday.value) : due;
+  pv.textContent = due && pay !== due ? `That's a non-working day, so it'll show as ${niceDate(pay)}.` : '';
   const preview = $('#cost-preview');
   if (isSub && Number(F.price.value) > 0) {
     const months = F.billing.value === '1m' ? pickedMonths() : null;
@@ -240,10 +284,11 @@ form.addEventListener('submit', async (e) => {
   const data = {
     kind: F.kind.value,
     name: F.title.value.trim(),
-    due: isSub ? rollForward(due, repeat, day, months) : due,
+    due: isSub ? rollForward(due, repeat, day, months, F.workday.value) : due,
     repeat,
     day,
     months,
+    workday: F.workday.value,
     price: isSub ? Number(F.price.value) : null,
     category: F.category.value.trim(),
     notes: F.notes.value.trim(),
@@ -261,11 +306,19 @@ $('#delete').addEventListener('click', async () => {
   refresh();
 });
 
-// Pick up a changed currency symbol when leaving Settings.
+// Pick up changed settings (currency, bank-holiday region) when leaving Settings.
+let lastRegion = null;
 addEventListener('hashchange', async () => {
   const s = (await getSetting(db, 'currency')) || '£';
-  if (s !== symbol) {
+  const region = await currentRegion();
+  if (s !== symbol || region !== lastRegion) {
     symbol = s;
+    if (lastRegion && region !== lastRegion) {
+      const official = await fetchGovUk(region);
+      if (official) await db.settings.put({ key: `govuk:${region}`, value: official });
+    }
+    lastRegion = region;
+    await loadHolidays();
     refresh();
   }
 });
