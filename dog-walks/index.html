@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#2f6b4f" />
+    <title>Dog Walks</title>
+    <link rel="icon" href="./icons/icon-192.png" />
+    <script type="module" crossorigin src="/personal-apps/dog-walks/assets/index-CTAN2Vx8.js"></script>
+    <link rel="stylesheet" crossorigin href="/personal-apps/dog-walks/assets/index-zLYT4GTS.css">
+  <link rel="manifest" href="/personal-apps/dog-walks/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/personal-apps/dog-walks/registerSW.js"></script></head>
+  <body>
+    <main class="page">
+      <section data-panel="find" class="stack">
+        <h1>Dog walks</h1>
+        <div class="row">
+          <label class="field" style="flex:1">
+            <span class="small muted">Drive time</span>
+            <select id="minutes">
+              <option value="15">15 min</option>
+              <option value="30" selected>30 min</option>
+              <option value="45">45 min</option>
+              <option value="60">1 hour</option>
+            </select>
+          </label>
+          <button id="search" style="align-self:flex-end">Find walks</button>
+        </div>
+        <p id="status" class="small muted"></p>
+        <div id="results" class="stack"></div>
+      </section>
+
+      <section data-panel="saved" class="stack" hidden>
+        <h1>Saved walks</h1>
+        <div id="saved-list" class="stack"></div>
+      </section>
+
+      <section data-panel="settings" hidden></section>
+    </main>
+
+    <nav class="tabbar">
+      <button data-view="find">Find</button>
+      <button data-view="saved">Saved</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+
+  </body>
+</html>
