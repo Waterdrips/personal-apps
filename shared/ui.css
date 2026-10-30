@@ -117,3 +117,13 @@ dialog::backdrop { background: rgb(0 0 0 / 0.4); }
 .segmented input { position: absolute; opacity: 0; pointer-events: none; }
 .segmented span { display: block; text-align: center; padding: 8px; border-radius: 999px; font-weight: 600; }
 .segmented input:checked + span { background: var(--accent); color: var(--accent-text); }
+
+/* Month picker */
+details summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.month-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 8px; }
+.month input { position: absolute; opacity: 0; pointer-events: none; }
+.month span {
+  display: block; text-align: center; padding: 8px 0; border-radius: 10px;
+  border: 1px solid var(--line); color: var(--muted); text-decoration: line-through;
+}
+.month input:checked + span { background: var(--accent); color: var(--accent-text); border-color: var(--accent); text-decoration: none; }

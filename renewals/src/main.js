@@ -3,7 +3,8 @@ import { initTabs, esc } from '../../shared/shell.js';
 import { openDb } from '../../shared/db.js';
 import { renderSettings, getSetting } from '../../shared/settings.js';
 import {
-  REPEATS, PERIOD_WORD, today, addRepeat, rollForward, daysUntil, whenText, niceDate, costs, money, calendarLink,
+  REPEATS, PERIOD_WORD, MONTH_NAMES, today, addRepeat, rollForward, daysUntil, whenText, niceDate, costs, money,
+  calendarLink, dueWithin, monthsLabel,
 } from './dates.js';
 
 document.documentElement.style.setProperty('--accent', '#3b5b92');
@@ -28,6 +29,12 @@ F.billing.innerHTML = Object.entries(REPEATS)
   .map(([k, r]) => `<option value="${k}" ${k === '1m' ? 'selected' : ''}>${r.label}</option>`)
   .join('');
 
+$('#month-grid').innerHTML = MONTH_NAMES.map(
+  (m, i) => `<label class="month"><input type="checkbox" name="months" value="${i + 1}" checked /><span>${m}</span></label>`
+).join('');
+const monthBoxes = () => [...form.querySelectorAll('input[name="months"]')];
+const pickedMonths = () => monthBoxes().filter((b) => b.checked).map((b) => Number(b.value));
+
 initTabs({
   upcoming: renderUpcoming,
   subs: renderSubs,
@@ -46,7 +53,7 @@ async function init() {
 async function renewPastSubscriptions() {
   const t = today();
   const past = await db.items.where('kind').equals('sub').filter((i) => i.due < t).toArray();
-  for (const i of past) await db.items.update(i.id, { due: rollForward(i.due, i.repeat, i.day) });
+  for (const i of past) await db.items.update(i.id, { due: rollForward(i.due, i.repeat, i.day, i.months) });
 }
 
 function refresh() {
@@ -102,8 +109,8 @@ function bindRows(el) {
       const item = await db.items.get(Number(b.dataset.done));
       if (item.repeat) {
         // Roll on from the due date (not today), so the MOT stays on its usual date.
-        let next = addRepeat(item.due, item.repeat, item.day);
-        if (next < today()) next = rollForward(next, item.repeat, item.day);
+        let next = addRepeat(item.due, item.repeat, item.day, item.months);
+        if (next < today()) next = rollForward(next, item.repeat, item.day, item.months);
         await db.items.update(item.id, { due: next });
       } else if (confirm(`Mark “${item.name}” done and remove it?`)) {
         await db.items.delete(item.id);
@@ -118,16 +125,17 @@ function bindRows(el) {
 async function renderSubs() {
   const subs = await db.items.where('kind').equals('sub').toArray();
   const withCost = subs
-    .map((s) => ({ ...s, ...costs(s.price, s.repeat) }))
+    .map((s) => ({ ...s, ...costs(s.price, s.repeat, s.months) }))
     .sort((a, b) => b.perYear - a.perYear);
 
   const perMonth = withCost.reduce((t, s) => t + s.perMonth, 0);
   const perYear = withCost.reduce((t, s) => t + s.perYear, 0);
+  const next30 = withCost.reduce((t, s) => t + dueWithin(s, 30), 0);
 
   $('#totals').innerHTML = `
-    <div><small>Per month</small><strong>${money(perMonth, symbol)}</strong></div>
-    <div><small>Per year</small><strong>${money(perYear, symbol)}</strong></div>
-    <div><small>Subscriptions</small><strong>${subs.length}</strong></div>`;
+    <div><small>Next 30 days</small><strong>${money(next30, symbol)}</strong></div>
+    <div><small>Avg / month</small><strong>${money(perMonth, symbol)}</strong></div>
+    <div><small>Per year</small><strong>${money(perYear, symbol)}</strong></div>`;
 
   const byCat = {};
   for (const s of withCost) byCat[s.category || 'Other'] = (byCat[s.category || 'Other'] ?? 0) + s.perMonth;
@@ -146,7 +154,7 @@ async function renderSubs() {
       <article class="card item" data-edit="${s.id}">
         <span class="grow">
           <strong>${esc(s.name)}</strong>
-          <small>${money(s.price, symbol)} per ${PERIOD_WORD[s.repeat]} · renews ${niceDate(s.due)}</small>
+          <small>${money(s.price, symbol)} per ${PERIOD_WORD[s.repeat]}${monthsLabel(s.months) ? ` (${monthsLabel(s.months)})` : ''} · next ${niceDate(s.due)}</small>
         </span>
         <span class="right">
           <strong>${money(s.perMonth, symbol)}</strong><small>/month</small>
@@ -178,6 +186,9 @@ async function openEditor(id) {
   F.price.value = item?.price ?? '';
   if (kind === 'sub') F.billing.value = item?.repeat || '1m';
   else F.repeat.value = item?.repeat ?? '1y';
+  const months = item?.months?.length ? item.months : null;
+  monthBoxes().forEach((b) => (b.checked = !months || months.includes(Number(b.value))));
+  $('#months-box').open = !!months;
 
   const cats = [...new Set((await db.items.toArray()).map((i) => i.category).filter(Boolean))];
   $('#categories').innerHTML = cats.map((c) => `<option value="${esc(c)}">`).join('');
@@ -196,12 +207,17 @@ function syncForm() {
   const isSub = F.kind.value === 'sub';
   form.querySelectorAll('.sub-only').forEach((e) => (e.hidden = !isSub));
   form.querySelectorAll('.due-only').forEach((e) => (e.hidden = isSub));
+  $('#months-box').hidden = !(isSub && F.billing.value === '1m');
   F.price.required = isSub;
   $('#date-label').textContent = isSub ? 'Next payment' : 'Due on';
   const preview = $('#cost-preview');
   if (isSub && Number(F.price.value) > 0) {
-    const c = costs(F.price.value, F.billing.value);
-    preview.textContent = `= ${money(c.perMonth, symbol)} a month · ${money(c.perYear, symbol)} a year`;
+    const months = F.billing.value === '1m' ? pickedMonths() : null;
+    const c = costs(F.price.value, F.billing.value, months);
+    const partial = months && months.length < 12;
+    preview.textContent = partial
+      ? `${months.length} payments a year = ${money(c.perYear, symbol)} a year · averages ${money(c.perMonth, symbol)} a month`
+      : `= ${money(c.perMonth, symbol)} a month · ${money(c.perYear, symbol)} a year`;
   } else preview.textContent = '';
 }
 
@@ -215,12 +231,19 @@ form.addEventListener('submit', async (e) => {
   const existing = editingId ? await db.items.get(editingId) : null;
   // Keep a month-end anchor (e.g. the 31st) unless the date itself was changed.
   const day = existing && existing.due === due ? existing.day : Number(due.slice(8));
+  const picked = pickedMonths();
+  if (isSub && repeat === '1m' && !picked.length) {
+    alert('Pick at least one month.');
+    return;
+  }
+  const months = isSub && repeat === '1m' && picked.length < 12 ? picked : null;
   const data = {
     kind: F.kind.value,
     name: F.title.value.trim(),
-    due: isSub ? rollForward(due, repeat, day) : due,
+    due: isSub ? rollForward(due, repeat, day, months) : due,
     repeat,
     day,
+    months,
     price: isSub ? Number(F.price.value) : null,
     category: F.category.value.trim(),
     notes: F.notes.value.trim(),
