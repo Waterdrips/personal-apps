@@ -16,6 +16,14 @@
       "description": "Training zones and a cycling plan.",
       "theme_color": "#b8432f",
       "letter": "C"
+    },
+    {
+      "id": "renewals",
+      "name": "Renewals",
+      "short_name": "Renewals",
+      "description": "Due dates, renewals and subscriptions with monthly and yearly totals.",
+      "theme_color": "#3b5b92",
+      "letter": "R"
     }
   ]
 }

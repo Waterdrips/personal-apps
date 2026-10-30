@@ -8,6 +8,7 @@ Each app has its own manifest and service worker, so each one installs as a sepa
 | Launcher | https://waterdrips.github.io/personal-apps/ |
 | Dog Walks | https://waterdrips.github.io/personal-apps/dog-walks/ |
 | Cycling Plan | https://waterdrips.github.io/personal-apps/cycling/ |
+| Renewals | https://waterdrips.github.io/personal-apps/renewals/ |
 
 ## Develop
 

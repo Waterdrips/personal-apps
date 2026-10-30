@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#3b5b92" />
+    <title>Renewals</title>
+    <link rel="icon" href="./icons/icon-192.png" />
+  </head>
+  <body>
+    <main class="page">
+      <section data-panel="upcoming" class="stack">
+        <h1>Coming up</h1>
+        <div id="upcoming" class="stack"></div>
+      </section>
+
+      <section data-panel="subs" class="stack" hidden>
+        <h1>Subscriptions</h1>
+        <div id="totals" class="totals"></div>
+        <div id="subs" class="stack"></div>
+      </section>
+
+      <section data-panel="settings" hidden></section>
+    </main>
+
+    <button class="fab" id="add" aria-label="Add">+</button>
+
+    <dialog id="editor">
+      <form method="dialog" class="stack" id="form">
+        <div class="segmented" role="radiogroup">
+          <label><input type="radio" name="kind" value="due" checked /><span>Due date</span></label>
+          <label><input type="radio" name="kind" value="sub" /><span>Subscription</span></label>
+        </div>
+
+        <label class="field"><span>Name</span>
+          <input name="title" required placeholder="e.g. Car MOT, Netflix" autocomplete="off" />
+        </label>
+
+        <div class="row sub-only">
+          <label class="field" style="flex:1"><span>Price</span>
+            <input name="price" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" />
+          </label>
+          <label class="field" style="flex:1"><span>Billed</span>
+            <select name="billing"></select>
+          </label>
+        </div>
+
+        <label class="field"><span id="date-label">Due on</span>
+          <input name="due" type="date" required />
+        </label>
+
+        <label class="field due-only"><span>Repeats</span>
+          <select name="repeat"></select>
+        </label>
+
+        <label class="field"><span>Category</span>
+          <input name="category" list="categories" placeholder="Car, Home, Streaming…" autocomplete="off" />
+          <datalist id="categories"></datalist>
+        </label>
+
+        <label class="field"><span>Notes</span>
+          <input name="notes" placeholder="Policy number, cancel-by date, who to call…" autocomplete="off" />
+        </label>
+
+        <p class="small muted" id="cost-preview"></p>
+
+        <div class="row">
+          <button type="submit" value="save">Save</button>
+          <button type="button" class="ghost" id="cancel">Cancel</button>
+          <a class="button ghost" id="calendar" target="_blank" rel="noopener" hidden>Add to calendar</a>
+          <button type="button" class="ghost danger" id="delete" hidden>Delete</button>
+        </div>
+      </form>
+    </dialog>
+
+    <nav class="tabbar">
+      <button data-view="upcoming">Coming up</button>
+      <button data-view="subs">Subscriptions</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
