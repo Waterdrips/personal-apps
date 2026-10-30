@@ -52,5 +52,5 @@ anything needing a client *secret* (e.g. Strava OAuth) will need a tiny serverle
 
 ## Deploy
 
-Push to `main`. The workflow builds and publishes `dist/` to Pages.
-One-off: repo **Settings → Pages → Source: GitHub Actions**.
+Push to `main`. The workflow builds and publishes `dist/` to the `gh-pages` branch, which Pages serves.
+If the site ever 404s, check repo **Settings → Pages → Deploy from a branch: `gh-pages` / root**.
