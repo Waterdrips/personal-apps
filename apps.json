@@ -1,0 +1,21 @@
+{
+  "repo": "personal-apps",
+  "apps": [
+    {
+      "id": "dog-walks",
+      "name": "Dog Walks",
+      "short_name": "Dog Walks",
+      "description": "Good dog walks within driving distance of here.",
+      "theme_color": "#2f6b4f",
+      "letter": "W"
+    },
+    {
+      "id": "cycling",
+      "name": "Cycling Plan",
+      "short_name": "Cycling",
+      "description": "Training zones and a cycling plan.",
+      "theme_color": "#b8432f",
+      "letter": "C"
+    }
+  ]
+}
